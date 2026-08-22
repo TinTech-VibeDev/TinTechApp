@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ir.tintech.film'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "ir.tintech.film"
+        minSdk 24
+        targetSdk 34
+        versionCode 2
+        versionName "1.1.0"
+        buildConfigField "String", "APP_BASE_URL", "\"https://movie-search-bot.barmonn.workers.dev/\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            applicationIdSuffix ".debug"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.webkit:webkit:1.10.0'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    // پلیر داخلی (منطق timeline مثل VLC برای ویدیو+زیرنویس)
+    implementation 'androidx.media3:media3-exoplayer:1.3.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.3.1'
+    implementation 'androidx.media3:media3-ui:1.3.1'
+}
