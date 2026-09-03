@@ -1,0 +1,86 @@
+name: Build FilmBuff
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Prepare release signing
+        id: signing
+        shell: bash
+        env:
+          # Primary names match the keystore workflow/instructions.
+          # ANDROID_* names remain supported for older repositories.
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 || secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS_VALUE: ${{ secrets.KEY_ALIAS || secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD_VALUE: ${{ secrets.KEY_PASSWORD || secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${KEYSTORE_B64:-}" ] && \
+             [ -n "${STORE_PASSWORD:-}" ] && \
+             [ -n "${KEY_ALIAS_VALUE:-}" ] && \
+             [ -n "${KEY_PASSWORD_VALUE:-}" ]; then
+            echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/filmbuff-release.jks"
+
+            # Validate the generated/uploaded keystore before Gradle starts.
+            keytool -list \
+              -keystore "$RUNNER_TEMP/filmbuff-release.jks" \
+              -storepass "$STORE_PASSWORD" \
+              -alias "$KEY_ALIAS_VALUE" >/dev/null
+
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Release signing is configured."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Release signing secrets are incomplete; building Debug APK instead."
+            echo "Expected secrets: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD"
+          fi
+
+      - name: Build signed Release APK + AAB
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/filmbuff-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew clean assembleRelease bundleRelease --no-daemon
+
+      - name: Build Debug APK (fallback when signing secrets are missing)
+        if: steps.signing.outputs.configured != 'true'
+        run: |
+          chmod +x gradlew
+          ./gradlew clean assembleDebug --no-daemon
+
+      - name: Upload FilmBuff artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmBuff-Android
+          if-no-files-found: error
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/apk/debug/*.apk
