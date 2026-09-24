@@ -1,0 +1,12 @@
+{
+  "version": "1.3.1",
+  "variant": "mobile",
+  "base_archive_sha256": "1aa66981488e67db5f437ab7dc5a3a9105966109705afdfcc5c486b115e412ed",
+  "unchanged_original_resource_files": 28,
+  "original_tv_player_java_identical": false,
+  "local_unsigned_release_build": "passed",
+  "github_signed_build": "workflow ready; not executed in this environment",
+  "download_hook_behavior": "verified with URL and Telegram openLink stub",
+  "real_device_and_iran_network_test": "not performed",
+  "note": "Signing uses existing GitHub KEYSTORE_* / KEY_* values or ANDROID_* equivalents; no new release key generated."
+}
