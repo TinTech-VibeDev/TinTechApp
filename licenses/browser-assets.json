@@ -1,0 +1,26 @@
+[
+  {
+    "file": "hls-1.6.17.js",
+    "source": "https://cdn.jsdelivr.net/npm/hls.js@1.6.17/dist/hls.min.js",
+    "sha256": "bf908f85f3941c514bd3df640695d1bf1190798720a74569700f64cc19845d6b",
+    "bytes": 543036
+  },
+  {
+    "file": "hls-1.5.7.js",
+    "source": "https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js",
+    "sha256": "a78b3603d762428caba2ef21674e4d47fbc4e7496292b28f845ba7372849360b",
+    "bytes": 412351
+  },
+  {
+    "file": "telegram-web-app.js",
+    "source": "https://telegram.org/js/telegram-web-app.js",
+    "sha256": "3549138a7934039fe7dfd1291a4ee739bd2b705a614308053a8b08a87d85c451",
+    "bytes": 116510
+  },
+  {
+    "file": "vazirmatn.woff2",
+    "source": "https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/Vazirmatn%5Bwght%5D.woff2",
+    "sha256": "4e3fa217d38fdafc1fea4414ceb58ca5e662cf0ab5fa735a8c8c20e8b42cad92",
+    "bytes": 111152
+  }
+]
