@@ -1,7 +1,0 @@
-<resources>
-    <style name="Theme.FilmBuff" parent="Theme.FilmBuff.Base">
-        <item name="android:windowSplashScreenBackground">#0A1117</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_full</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">#0A1117</item>
-    </style>
-</resources>
