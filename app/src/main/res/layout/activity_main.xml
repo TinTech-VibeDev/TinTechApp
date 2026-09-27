@@ -1,0 +1,24 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#0A1117">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:gravity="center_vertical" android:paddingStart="@dimen/home_margin" android:paddingEnd="@dimen/home_margin" android:paddingTop="6dp" android:paddingBottom="6dp" android:layoutDirection="ltr">
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:text="@string/app_name" android:textStyle="bold" android:textSize="18sp" android:textColor="#B9F6E1" android:paddingStart="8dp" />
+        <Button android:id="@+id/homeButton" style="@style/FilmBuffControl" android:text="خانه" />
+        <Button android:id="@+id/refreshButton" style="@style/FilmBuffControl" android:text="تازه‌سازی" />
+        <Button android:id="@+id/connectionButton" style="@style/FilmBuffControl" android:text="اتصال" />
+    </LinearLayout>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <WebView android:id="@+id/webView" android:layout_width="match_parent" android:layout_height="match_parent" android:focusable="true" android:focusableInTouchMode="true" />
+        <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="3dp" android:layout_gravity="top" android:indeterminate="true" android:indeterminateTint="#B9F6E1" android:visibility="gone" />
+        <LinearLayout android:id="@+id/connectionError" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:padding="32dp" android:background="#0A1117" android:visibility="gone">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ارتباط برقرار نشد" android:textColor="#F5F7F8" android:textSize="24sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:layout_marginBottom="16dp" android:text="اتصال اینترنت یا آدرس سایت را بررسی کنید." android:textColor="#ACBCC5" android:textSize="16sp" android:gravity="center" />
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content">
+                <Button android:id="@+id/retryButton" style="@style/FilmBuffControl" android:text="تلاش دوباره" />
+                <Button android:id="@+id/errorSettingsButton" style="@style/FilmBuffControl" android:text="تنظیم آدرس" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>
