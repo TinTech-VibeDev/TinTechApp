@@ -1,0 +1,95 @@
+plugins {
+    id 'com.android.application'
+}
+
+def appUrl = providers.gradleProperty('appBaseUrl').orElse(providers.environmentVariable('APP_BASE_URL')).getOrElse('https://movie-search-bot.barmonn.workers.dev/menu').trim()
+if (!appUrl) appUrl = 'https://movie-search-bot.barmonn.workers.dev/menu'
+def fallbackUrls = providers.gradleProperty('appFallbackUrls').orElse(providers.environmentVariable('APP_FALLBACK_URLS')).getOrElse('')
+([appUrl] + fallbackUrls.split(',').findAll { it.trim() }).each { raw ->
+    def uri = new URI(raw.trim())
+    if (uri.scheme != 'https' || !uri.host || uri.userInfo || uri.fragment) {
+        throw new GradleException('App website addresses must be HTTPS URLs without credentials or fragments.')
+    }
+}
+
+android {
+    namespace 'ir.tintech.film'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+
+    defaultConfig {
+        applicationId "ir.tintech.film"
+        minSdk 24
+        targetSdk 36
+        versionCode 130
+        versionName "1.3.0"
+        buildConfigField "String", "APP_BASE_URL", groovy.json.JsonOutput.toJson(appUrl)
+        buildConfigField "String", "APP_FALLBACK_URLS", groovy.json.JsonOutput.toJson(fallbackUrls.trim())
+        manifestPlaceholders = [appHost: new URI(appUrl).host]
+    }
+
+    flavorDimensions += "device"
+    productFlavors {
+        mobile {
+            dimension "device"
+            buildConfigField "boolean", "IS_TV", "false"
+        }
+        tv {
+            dimension "device"
+            applicationIdSuffix ".tv"
+            buildConfigField "boolean", "IS_TV", "true"
+            resValue "string", "app_name", "FilmBuff TV"
+        }
+    }
+
+    def releaseStore = System.getenv("ANDROID_KEYSTORE_PATH")
+    def releaseAlias = System.getenv("ANDROID_KEY_ALIAS")
+    def releaseStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+    def releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+    def hasReleaseSigning = releaseStore && releaseAlias && releaseStorePassword && releaseKeyPassword
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStore)
+                storePassword releaseStorePassword
+                keyAlias releaseAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'com.google.android.material:material:1.13.0'
+    implementation 'androidx.webkit:webkit:1.14.0'
+    implementation 'androidx.media3:media3-exoplayer:1.10.0'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.10.0'
+    implementation 'androidx.media3:media3-ui:1.10.0'
+    testImplementation 'junit:junit:4.13.2'
+}
