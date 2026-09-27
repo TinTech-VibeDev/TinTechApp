@@ -1,0 +1,7 @@
+<resources>
+    <dimen name="control_size">52dp</dimen>
+    <dimen name="control_text">16sp</dimen>
+    <dimen name="player_margin">32dp</dimen>
+    <dimen name="home_margin">24dp</dimen>
+    <dimen name="player_title">22sp</dimen>
+</resources>
