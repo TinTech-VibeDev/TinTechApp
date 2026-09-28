@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>FilmBuff Player</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#0a0a0a;color:#fff;font-family:Tahoma,sans-serif;overflow:hidden}
+    #wrap{position:relative;width:100%;height:100%;background:#000}
+    video{width:100%;height:100%;object-fit:contain;background:#000}
+    #bar{position:absolute;left:0;right:0;bottom:0;padding:14px 16px 18px;background:linear-gradient(transparent,rgba(0,0,0,.85));display:flex;flex-direction:column;gap:10px;opacity:1;transition:opacity .25s}
+    #wrap.hide-ui #bar,#wrap.hide-ui #top{opacity:0;pointer-events:none}
+    #top{position:absolute;left:0;right:0;top:0;padding:12px 14px;display:flex;align-items:center;gap:10px;background:linear-gradient(rgba(0,0,0,.8),transparent);transition:opacity .25s}
+    #title{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    button{background:rgba(255,255,255,.12);border:0;color:#fff;border-radius:10px;padding:8px 12px;cursor:pointer;font:inherit;font-size:13px}
+    button:hover{background:rgba(225,6,0,.85)}
+    #progress{width:100%;accent-color:#e10600;height:6px}
+    #row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    #time{font-size:12px;opacity:.85;min-width:90px}
+    #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;background:#0a0a0a;line-height:1.8}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
+</head>
+<body>
+  <div id="wrap">
+    <div id="top">
+      <div id="title">FilmBuff</div>
+      <button type="button" id="btnClose">بستن</button>
+    </div>
+    <video id="v" playsinline controlsList="nodownload"></video>
+    <div id="bar">
+      <input id="progress" type="range" min="0" max="1000" value="0"/>
+      <div id="row">
+        <button type="button" id="btnPlay">پخش</button>
+        <button type="button" id="btnBack">-10ث</button>
+        <button type="button" id="btnFwd">+10ث</button>
+        <span id="time">00:00 / 00:00</span>
+        <button type="button" id="btnMute">صدا</button>
+        <button type="button" id="btnFit">اندازه</button>
+        <button type="button" id="btnFs">تمام‌صفحه</button>
+      </div>
+    </div>
+    <div id="err"></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const videoUrl = params.get('u') || params.get('url') || params.get('video') || '';
+    const subUrl = params.get('sub') || params.get('vtt') || params.get('srt') || '';
+    const title = params.get('title') || 'FilmBuff';
+    document.getElementById('title').textContent = title;
+    document.title = title + ' — FilmBuff';
+
+    const v = document.getElementById('v');
+    const wrap = document.getElementById('wrap');
+    const progress = document.getElementById('progress');
+    const timeEl = document.getElementById('time');
+    const err = document.getElementById('err');
+    let hls = null;
+    let fits = ['contain','cover','fill'];
+    let fitI = 0;
+    let hideTimer = null;
+
+    function fmt(s){
+      s = Math.max(0, Math.floor(s||0));
+      const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+      if(h>0) return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+      return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+    }
+    function showErr(msg){
+      err.style.display='flex';
+      err.textContent = msg || 'پخش ممکن نیست';
+    }
+    function scheduleHide(){
+      wrap.classList.remove('hide-ui');
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(()=>wrap.classList.add('hide-ui'), 2800);
+    }
+    wrap.addEventListener('mousemove', scheduleHide);
+    wrap.addEventListener('click', scheduleHide);
+    scheduleHide();
+
+    document.getElementById('btnClose').onclick = () => {
+      if (window.FilmBuffDesktopPlayer && FilmBuffDesktopPlayer.close) FilmBuffDesktopPlayer.close();
+      else window.close();
+    };
+    document.getElementById('btnPlay').onclick = () => { if(v.paused) v.play(); else v.pause(); };
+    document.getElementById('btnBack').onclick = () => { v.currentTime = Math.max(0, v.currentTime - 10); };
+    document.getElementById('btnFwd').onclick = () => { v.currentTime = Math.min(v.duration||0, v.currentTime + 10); };
+    document.getElementById('btnMute').onclick = () => { v.muted = !v.muted; };
+    document.getElementById('btnFit').onclick = () => {
+      fitI = (fitI+1)%fits.length;
+      v.style.objectFit = fits[fitI];
+    };
+    document.getElementById('btnFs').onclick = () => {
+      if (!document.fullscreenElement) wrap.requestFullscreen().catch(()=>{});
+      else document.exitFullscreen().catch(()=>{});
+    };
+    progress.addEventListener('input', () => {
+      if (!v.duration) return;
+      v.currentTime = (progress.value/1000) * v.duration;
+    });
+    v.addEventListener('timeupdate', () => {
+      if (v.duration) progress.value = Math.floor((v.currentTime/v.duration)*1000);
+      timeEl.textContent = fmt(v.currentTime)+' / '+fmt(v.duration);
+      document.getElementById('btnPlay').textContent = v.paused ? 'پخش' : 'توقف';
+    });
+    v.addEventListener('error', () => showErr('خطا در بارگذاری ویدیو'));
+
+    if (!videoUrl) { showErr('لینک ویدیو یافت نشد'); }
+    else {
+      const isHls = /\.m3u8(\?|$)/i.test(videoUrl) || /[?&](type|format)=hls/i.test(videoUrl);
+      if (isHls && window.Hls && Hls.isSupported()) {
+        hls = new Hls({ enableWorker: true });
+        hls.loadSource(videoUrl);
+        hls.attachMedia(v);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(()=>{}));
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data && data.fatal) showErr('خطای پخش HLS');
+        });
+      } else if (isHls && v.canPlayType('application/vnd.apple.mpegurl')) {
+        v.src = videoUrl;
+        v.play().catch(()=>{});
+      } else {
+        v.src = videoUrl;
+        v.play().catch(()=>{});
+      }
+      if (subUrl) {
+        const t = document.createElement('track');
+        t.kind = 'subtitles';
+        t.label = 'زیرنویس';
+        t.srclang = 'fa';
+        t.src = subUrl;
+        t.default = true;
+        v.appendChild(t);
+      }
+    }
+  </script>
+</body>
+</html>
