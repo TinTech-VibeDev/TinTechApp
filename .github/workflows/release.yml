@@ -1,0 +1,112 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Verify project root
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PWD=$(pwd)"
+          ls -la
+          if [ ! -f package.json ]; then
+            echo "::error::package.json not at repo root. Upload FilmBuff-Desktop files to repository ROOT."
+            find . -maxdepth 4 -name package.json 2>/dev/null | head -20
+            exit 1
+          fi
+          if [ ! -f main.js ]; then
+            echo "::error::main.js missing"
+            exit 1
+          fi
+          if [ ! -f build/icon.ico ] && [ ! -f assets/icon.ico ]; then
+            echo "::error::icon.ico missing in build/ or assets/"
+            exit 1
+          fi
+          # Prefer build/icon.ico for electron-builder
+          if [ ! -f build/icon.ico ] && [ -f assets/icon.ico ]; then
+            mkdir -p build
+            cp assets/icon.ico build/icon.ico
+            cp assets/icon.png build/icon.png 2>/dev/null || true
+          fi
+          node -v
+          npm -v
+          cat package.json
+
+      - name: Install npm dependencies
+        shell: bash
+        env:
+          NODE_ENV: development
+          npm_config_production: "false"
+          ELECTRON_GET_USE_PROXY: "false"
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            npm ci --include=dev --no-fund --no-audit || npm install --include=dev --no-fund --no-audit
+          else
+            npm install --include=dev --no-fund --no-audit
+          fi
+          echo "--- node_modules check ---"
+          test -d node_modules/electron
+          test -d node_modules/electron-builder
+          test -f node_modules/electron-builder/cli.js || test -f node_modules/electron-builder/install-app-deps.js
+          npx electron --version
+          npx electron-builder --version
+          ls node_modules/.bin/ | head -40
+
+      - name: Build Windows NSIS + Portable
+        shell: bash
+        env:
+          NODE_ENV: development
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          WIN_CSC_LINK: ""
+          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: "true"
+        run: |
+          set -euo pipefail
+          # Always call via npx so PATH is correct on Windows runners
+          npx electron-builder --win --x64 --publish never
+          echo "--- dist ---"
+          ls -la dist/
+          # Must produce at least one exe
+          count=$(find dist -maxdepth 1 -type f -name '*.exe' | wc -l)
+          echo "exe count=$count"
+          test "$count" -ge 1
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmBuff-Windows-1.0.2
+          path: |
+            dist/*.exe
+            dist/latest.yml
+            dist/*.blockmap
+          if-no-files-found: error
+
+      - name: Publish GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
