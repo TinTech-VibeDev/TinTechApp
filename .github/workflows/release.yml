@@ -1,0 +1,113 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      # Prevent npm from treating this as production (skips packages / weird exit handler)
+      NODE_ENV: development
+      npm_config_production: "false"
+      npm_config_fund: "false"
+      npm_config_audit: "false"
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # Do NOT enable cache: npm — broken/corrupt cache often causes "Exit handler never called"
+
+      - name: Prepare project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PWD=$(pwd)"
+          ls -la
+          test -f package.json
+          test -f main.js
+          mkdir -p build
+          if [ ! -f build/icon.ico ] && [ -f assets/icon.ico ]; then
+            cp assets/icon.ico build/icon.ico
+          fi
+          if [ ! -f build/icon.png ] && [ -f assets/icon.png ]; then
+            cp assets/icon.png build/icon.png
+          fi
+          test -f build/icon.ico
+          node -v
+          npm -v
+
+      - name: Clean npm state
+        shell: cmd
+        run: |
+          npm cache clean --force
+          if exist node_modules rmdir /s /q node_modules
+          if exist package-lock.json del /f package-lock.json
+
+      - name: Install dependencies (retry)
+        shell: cmd
+        run: |
+          set NODE_ENV=development
+          set npm_config_production=false
+          echo Attempt 1: npm install
+          call npm install --no-fund --no-audit --no-prefer-offline --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
+          if %ERRORLEVEL%==0 goto check
+          echo Attempt 1 failed, retry after clean...
+          npm cache clean --force
+          if exist node_modules rmdir /s /q node_modules
+          call npm install --no-fund --no-audit --no-prefer-offline --fetch-retries=5
+          if %ERRORLEVEL%==0 goto check
+          echo Attempt 2 failed, try explicit packages...
+          call npm install electron@33.2.1 electron-builder@25.1.8 --no-fund --no-audit --save
+          if %ERRORLEVEL% NEQ 0 exit /b 1
+          :check
+          if not exist node_modules\electron\package.json exit /b 1
+          if not exist node_modules\electron-builder\package.json exit /b 1
+          echo Install OK
+          dir node_modules\electron
+          dir node_modules\electron-builder
+
+      - name: Build Windows executables
+        shell: cmd
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set NODE_ENV=development
+          set CSC_IDENTITY_AUTO_DISCOVERY=false
+          call npx electron-builder --win --x64 --publish never
+          if %ERRORLEVEL% NEQ 0 exit /b 1
+          dir dist
+          dir dist\*.exe
+          if not exist dist\*.exe (
+            echo No exe produced
+            exit /b 1
+          )
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmBuff-Windows-1.0.3
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: Publish GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
