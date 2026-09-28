@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>FilmBuff Player</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:100%;background:#000;color:#fff;font-family:Tahoma,Arial,sans-serif;overflow:hidden;user-select:none}
+    #root{position:relative;width:100%;height:100%;background:#000}
+    video{width:100%;height:100%;object-fit:contain;background:#000;display:block}
+    #top{
+      position:absolute;left:0;right:0;top:0;z-index:5;
+      display:flex;align-items:center;justify-content:flex-start;gap:6px;
+      padding:10px 12px;
+      background:linear-gradient(180deg,rgba(0,0,0,.75),transparent);
+      opacity:1;transition:opacity .25s;
+    }
+    #root.hide-ui #top,#root.hide-ui #bottom{opacity:0;pointer-events:none}
+    .icon-btn{
+      width:44px;height:44px;border:0;border-radius:12px;
+      background:rgba(255,255,255,.12);color:#fff;cursor:pointer;
+      font-size:16px;display:grid;place-items:center;flex-shrink:0;
+    }
+    .icon-btn:hover{background:rgba(225,6,0,.85)}
+    #spacer{flex:1}
+    #bottom{
+      position:absolute;left:0;right:0;bottom:0;z-index:5;
+      padding:12px 16px 16px;
+      background:linear-gradient(transparent,rgba(0,0,0,.88));
+      opacity:1;transition:opacity .25s;
+    }
+    #progress{width:100%;height:8px;accent-color:#e10600;cursor:pointer}
+    #row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+    #time{font-size:13px;opacity:.9;min-width:110px}
+    #hint{
+      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      background:rgba(0,0,0,.72);border-radius:14px;padding:12px 22px;
+      font-size:16px;font-weight:700;display:none;z-index:6;
+      min-width:96px;text-align:center;
+    }
+    #err{
+      position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+      background:#000;padding:28px;text-align:center;line-height:1.9;z-index:7;font-size:15px;
+    }
+    #menu{
+      position:absolute;top:60px;right:12px;z-index:8;min-width:200px;
+      background:rgba(20,20,20,.96);border:1px solid rgba(255,255,255,.15);
+      border-radius:14px;padding:8px;display:none;max-height:50vh;overflow:auto;
+    }
+    #menu button{
+      display:block;width:100%;text-align:right;background:transparent;border:0;color:#fff;
+      padding:10px 12px;border-radius:10px;cursor:pointer;font:inherit;font-size:13px;
+    }
+    #menu button:hover,#menu button.active{background:rgba(225,6,0,.35)}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
+</head>
+<body>
+<div id="root">
+  <div id="top">
+    <button class="icon-btn" type="button" id="btnQuality" title="کیفیت تصویر">HD</button>
+    <button class="icon-btn" type="button" id="btnAudio" title="صدای پخش">♪</button>
+    <button class="icon-btn" type="button" id="btnSubColor" title="رنگ زیرنویس">CC</button>
+    <button class="icon-btn" type="button" id="btnAspect" title="اندازه تصویر">⤢</button>
+    <button class="icon-btn" type="button" id="btnPip" title="تصویر در تصویر">⧉</button>
+    <div id="spacer"></div>
+    <button class="icon-btn" type="button" id="btnClose" title="بستن">✕</button>
+  </div>
+  <video id="v" playsinline></video>
+  <div id="bottom">
+    <input id="progress" type="range" min="0" max="1000" value="0"/>
+    <div id="row">
+      <button class="icon-btn" type="button" id="btnPlay" style="width:auto;padding:0 14px">پخش</button>
+      <button class="icon-btn" type="button" id="btnBack" style="width:auto;padding:0 12px">−۱۰</button>
+      <button class="icon-btn" type="button" id="btnFwd" style="width:auto;padding:0 12px">+۱۰</button>
+      <span id="time">00:00 / 00:00</span>
+    </div>
+  </div>
+  <div id="hint"></div>
+  <div id="menu"></div>
+  <div id="err"></div>
+</div>
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const videoUrl = params.get('u') || params.get('url') || params.get('video') || '';
+  const subUrl = params.get('sub') || params.get('vtt') || params.get('srt') || '';
+  const title = params.get('title') || 'FilmBuff';
+  document.title = title + ' — FilmBuff';
+
+  const root = document.getElementById('root');
+  const v = document.getElementById('v');
+  const progress = document.getElementById('progress');
+  const timeEl = document.getElementById('time');
+  const hint = document.getElementById('hint');
+  const err = document.getElementById('err');
+  const menu = document.getElementById('menu');
+  let hls = null, hideTimer = null, levels = [], audioTracks = [];
+  const fits = ['contain','cover','fill'];
+  let fitI = 0;
+  const subColors = ['#FFFFFF','#FFFF00','#00FFFF','#80FF80','#FF80B7'];
+  const subNames = ['سفید','زرد','فیروزه‌ای','سبز','صورتی'];
+  let subColorI = 0;
+
+  function fmt(s){
+    s = Math.max(0, Math.floor(s||0));
+    const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+    if(h) return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+    return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+  }
+  function showHint(text){
+    hint.textContent = text;
+    hint.style.display = 'block';
+    clearTimeout(showHint._t);
+    showHint._t = setTimeout(()=>hint.style.display='none', 900);
+  }
+  function showErr(msg){ err.style.display='flex'; err.textContent = msg; }
+  function scheduleHide(){
+    root.classList.remove('hide-ui');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(()=>root.classList.add('hide-ui'), 3000);
+  }
+  root.addEventListener('mousemove', scheduleHide);
+  root.addEventListener('click', (e)=>{ if(e.target===v||e.target===root) scheduleHide(); });
+  scheduleHide();
+
+  function closeMenu(){ menu.style.display='none'; menu.innerHTML=''; }
+  function openMenu(items){
+    menu.innerHTML='';
+    items.forEach(it=>{
+      const b=document.createElement('button');
+      b.textContent=it.label;
+      if(it.active) b.className='active';
+      b.onclick=()=>{ it.onClick(); closeMenu(); };
+      menu.appendChild(b);
+    });
+    menu.style.display='block';
+  }
+
+  document.getElementById('btnClose').onclick = ()=>{
+    if(window.FilmBuffDesktopPlayer) FilmBuffDesktopPlayer.close();
+    else window.close();
+  };
+  document.getElementById('btnPlay').onclick = ()=>{ if(v.paused) v.play(); else v.pause(); };
+  document.getElementById('btnBack').onclick = ()=>{ v.currentTime=Math.max(0,v.currentTime-10); showHint('-۱۰ ثانیه'); };
+  document.getElementById('btnFwd').onclick = ()=>{ v.currentTime=Math.min(v.duration||0,v.currentTime+10); showHint('+۱۰ ثانیه'); };
+  document.getElementById('btnAspect').onclick = ()=>{
+    fitI=(fitI+1)%fits.length;
+    v.style.objectFit=fits[fitI];
+    showHint(fits[fitI]==='contain'?'مناسب':fits[fitI]==='cover'?'پوشش':'پر');
+  };
+  document.getElementById('btnPip').onclick = async ()=>{
+    try{
+      if(document.pictureInPictureElement) await document.exitPictureInPicture();
+      else if(document.pictureInPictureEnabled) await v.requestPictureInPicture();
+      else showHint('PiP پشتیبانی نمی‌شود');
+    }catch(e){ showHint('PiP در دسترس نیست'); }
+  };
+  document.getElementById('btnSubColor').onclick = ()=>{
+    openMenu(subNames.map((n,i)=>({
+      label:n, active:i===subColorI,
+      onClick:()=>{
+        subColorI=i;
+        const tracks=v.textTracks;
+        for(let t=0;t<tracks.length;t++){
+          tracks[t].mode = 'showing';
+        }
+        document.documentElement.style.setProperty('--sub', subColors[i]);
+        showHint('زیرنویس: '+n);
+        // style cues via CSS if possible
+        const st=document.getElementById('subStyle')||document.createElement('style');
+        st.id='subStyle';
+        st.textContent='video::cue{color:'+subColors[i]+' !important;background:rgba(0,0,0,.45)}';
+        document.head.appendChild(st);
+      }
+    })));
+  };
+  document.getElementById('btnQuality').onclick = ()=>{
+    if(!levels.length){ showHint('فقط یک کیفیت'); return; }
+    const items=[{label:'خودکار',active:hls&&hls.currentLevel===-1,onClick:()=>{ if(hls) hls.currentLevel=-1; showHint('کیفیت خودکار'); }}]
+      .concat(levels.map((lv,i)=>({
+        label:(lv.height?lv.height+'p':('سطح '+i))+(lv.bitrate?' · '+Math.round(lv.bitrate/1000)+'k':''),
+        active:hls&&hls.currentLevel===i,
+        onClick:()=>{ if(hls) hls.currentLevel=i; showHint('کیفیت تنظیم شد'); }
+      })));
+    openMenu(items);
+  };
+  document.getElementById('btnAudio').onclick = ()=>{
+    if(hls && hls.audioTracks && hls.audioTracks.length){
+      openMenu(hls.audioTracks.map((a,i)=>({
+        label:a.name||a.lang||('صدا '+(i+1)),
+        active:hls.audioTrack===i,
+        onClick:()=>{ hls.audioTrack=i; showHint('صدا عوض شد'); }
+      })));
+      return;
+    }
+    v.muted=!v.muted;
+    showHint(v.muted?'بی‌صدا':'با صدا');
+  };
+
+  progress.addEventListener('input',()=>{ if(v.duration) v.currentTime=(progress.value/1000)*v.duration; });
+  v.addEventListener('timeupdate',()=>{
+    if(v.duration) progress.value=Math.floor((v.currentTime/v.duration)*1000);
+    timeEl.textContent=fmt(v.currentTime)+' / '+fmt(v.duration);
+    document.getElementById('btnPlay').textContent=v.paused?'پخش':'توقف';
+  });
+  v.addEventListener('click',()=>{ if(v.paused) v.play(); else v.pause(); });
+  v.addEventListener('error',()=>showErr('خطا در بارگذاری ویدیو'));
+
+  // double-tap style seek zones for laptop trackpad/mouse
+  let lastTap=0, lastX=0;
+  v.addEventListener('dblclick', (e)=>{
+    const rect=v.getBoundingClientRect();
+    const x=e.clientX-rect.left;
+    if(x<rect.width/3){ v.currentTime=Math.max(0,v.currentTime-10); showHint('-۱۰'); }
+    else if(x>rect.width*2/3){ v.currentTime=Math.min(v.duration||0,v.currentTime+10); showHint('+۱۰'); }
+    else {
+      if(!document.fullscreenElement) root.requestFullscreen().catch(()=>{});
+      else document.exitFullscreen().catch(()=>{});
+    }
+  });
+
+  document.addEventListener('keydown',(e)=>{
+    if(e.key===' '||e.key==='k'){ e.preventDefault(); if(v.paused) v.play(); else v.pause(); }
+    if(e.key==='ArrowRight'){ v.currentTime=Math.min(v.duration||0,v.currentTime+10); showHint('+۱۰'); }
+    if(e.key==='ArrowLeft'){ v.currentTime=Math.max(0,v.currentTime-10); showHint('-۱۰'); }
+    if(e.key==='f'){ if(!document.fullscreenElement) root.requestFullscreen().catch(()=>{}); else document.exitFullscreen().catch(()=>{}); }
+    if(e.key==='Escape'){ closeMenu(); }
+  });
+
+  if(!videoUrl){ showErr('لینک پخش معتبر نیست'); return; }
+
+  const isHls=/\.m3u8(\?|$)/i.test(videoUrl);
+  if(isHls && window.Hls && Hls.isSupported()){
+    hls=new Hls({enableWorker:true, startLevel:-1});
+    hls.loadSource(videoUrl);
+    hls.attachMedia(v);
+    hls.on(Hls.Events.MANIFEST_PARSED,(_,data)=>{
+      levels=(data&&data.levels)||hls.levels||[];
+      v.play().catch(()=>{});
+    });
+    hls.on(Hls.Events.ERROR,(_,data)=>{ if(data&&data.fatal) showErr('خطای پخش HLS'); });
+  } else if(isHls && v.canPlayType('application/vnd.apple.mpegurl')){
+    v.src=videoUrl; v.play().catch(()=>{});
+  } else {
+    v.src=videoUrl; v.play().catch(()=>{});
+  }
+
+  if(subUrl){
+    const t=document.createElement('track');
+    t.kind='subtitles'; t.label='زیرنویس'; t.srclang='fa'; t.src=subUrl; t.default=true;
+    v.appendChild(t);
+    setTimeout(()=>{ try{ if(v.textTracks[0]) v.textTracks[0].mode='showing'; }catch(e){} }, 500);
+  }
+})();
+</script>
+</body>
+</html>
